@@ -14,17 +14,25 @@ set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS} -gencode arch=compute_50,code=sm_50)
 cuda_add_library(cuda_core fp16_dev.cu)
  
 # 编译C++源文件
-add_executable(minist_test mnistCUDNN.cpp fp16_emu.cpp)
+add_executable(keras_minist myMnistCUDNN.cpp fp16_emu.cpp)
 include_directories(/usr/local/cuda/include /usr/include)
 # 链接CUDA目标到C++可执行文件
-target_link_libraries(minist_test PRIVATE cuda_core 
+target_link_libraries(keras_minist PRIVATE cuda_core 
 /usr/local/cuda/lib64/libcublasLt.so
 /usr/local/cuda/lib64/libcudart.so
 /usr/local/cuda/lib64/libcublas.so
 /usr/lib/x86_64-linux-gnu/libcudnn.so
 /usr/lib/x86_64-linux-gnu/libfreeimage.so)
 
-
+# 编译C++源文件
+add_executable(caffe_minist mnistCUDNN.cpp fp16_emu.cpp)
+# 链接CUDA目标到C++可执行文件
+target_link_libraries(caffe_minist PRIVATE cuda_core 
+/usr/local/cuda/lib64/libcublasLt.so
+/usr/local/cuda/lib64/libcudart.so
+/usr/local/cuda/lib64/libcublas.so
+/usr/lib/x86_64-linux-gnu/libcudnn.so
+/usr/lib/x86_64-linux-gnu/libfreeimage.so)
 
 
 # enable_language(CUDA)

@@ -68,6 +68,7 @@ void gemv(cublasHandle_t cublasHandle, int m, int n, float alpha,
                       y,
                       m) );
 #else
+    // this branch is executed
     checkCublasErrors( cublasSgemv(cublasHandle, CUBLAS_OP_T,
                                   m, n,
                                   &alpha,

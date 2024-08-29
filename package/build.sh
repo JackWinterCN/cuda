@@ -1,6 +1,6 @@
 cd ../build
-rm ./build/* -rf
+# rm ./* -rf
 cmake ..
 cmake --build .
-cp ./minist_test ../output
-cp ../data ../output/ -r
+cp ./*_minist ../output
+cp ../model_param/* ../output/ -r

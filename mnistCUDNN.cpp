@@ -57,7 +57,7 @@ const char *ip2_bias_bin = "ip2.bias.bin";
 
 void get_path(std::string& sFilename, const char *fname, const char *pname)
 {
-    sFilename = (std::string("data/") + std::string(fname));
+    sFilename = (std::string("caffe_mnist/") + std::string(fname));
 }
 
 // Need the map, since scaling factor is of float type in half precision
