@@ -41,9 +41,9 @@
 #define IMAGE_W 28
 
 const char *first_image = "one_28x28.pgm";
-// const char *second_image = "three_28x28.pgm";
-const char *second_image = "five_28x28.pgm";
+const char *second_image = "three_28x28.pgm";
 const char *third_image = "five_28x28.pgm";
+const char *test_image = "five_28x28.pgm";
 
 const char *conv1_bin = "conv2d_kernel.bin";
 const char *conv1_bias_bin = "conv2d_bias.bin";
@@ -204,8 +204,8 @@ struct Layer_t
 
     // linear dimension (i.e. size is kernel_dim * kernel_dim)
     int kernel_dim;
-    value_type *data_h, *data_d;
-    value_type *bias_h, *bias_d;
+    value_type *data_h, *data_d; // store weight param of this layer
+    value_type *bias_h, *bias_d; // store bias param of this layer
 
     Layer_t() : data_h(NULL), data_d(NULL), bias_h(NULL), bias_d(NULL), 
                 inputs(0), outputs(0), kernel_dim(0), fp16Import(FP16_HOST)
@@ -504,7 +504,7 @@ class network_t
 
         h = 1; w = 1; c = dim_y;
     }
-
+    //   convoluteForward(conv1, 1, 1, 28, 28, srcData, &dstData);
     void convoluteForward(const Layer_t<value_type>& conv,
                           int& n, int& c, int& h, int& w,
                           value_type* srcData, value_type** dstData)
@@ -543,6 +543,10 @@ class network_t
                                                     CUDNN_CROSS_CORRELATION,
                                                     convDataType) );
 
+        // outputDim = 1 + ( inputDim + 2*pad - (((filterDim-1)*dilation)+1) )/convolutionStride;
+        //           = 1 + ( 28 + 2*0 - (((3 - 1)*1) + 1) )/1
+        //           = 1 + 28 - 3 
+        //           = 26 
         // find dimension of convolution output
         checkCUDNN( cudnnGetConvolutionNdForwardOutputDim(convDesc,
                                                 srcTensorDesc,
@@ -610,6 +614,8 @@ class network_t
                                                 dstTensorDesc,
                                                 algo,
                                                 &sizeInBytes) );
+        std::cout << "GPU workspace size for conv: " << sizeInBytes << std::endl; // 0
+
         if (sizeInBytes!=0)
         {
           checkCudaErrors( cudaMalloc(&workSpace,sizeInBytes) );
@@ -1023,9 +1029,6 @@ static void displayUsage()
 
 int main(int argc, char *argv[])
 {   
-    std::string image_path;
-    int i1,i2,i3;
-
     printf("Executing: %s", baseFile(argv[0]));
     for (int i = 1; i < argc; i++) {
         printf(" %s", argv[i]);
@@ -1050,107 +1053,39 @@ int main(int argc, char *argv[])
         checkCudaErrors( cudaSetDevice(device) );
     }
     std::cout << "Using device " << device << std::endl;
-    
-    if (checkCmdLineFlag(argc, (const char **)argv, "image"))
-    {
-        char* image_name;
-        getCmdLineArgumentString(argc, (const char **)argv,
-                                 "image", (char **) &image_name);        
 
-        network_t<float> mnist;
-        Layer_t<float> conv1(1,20,5,conv1_bin,conv1_bias_bin,argv[0]);
-        Layer_t<float> conv2(20,50,5,conv2_bin,conv2_bias_bin,argv[0]);
-        Layer_t<float>   ip1(800,500,1,ip1_bin,ip1_bias_bin,argv[0]);
-        Layer_t<float>   ip2(500,10,1,ip2_bin,ip2_bias_bin,argv[0]);
-        int i1 = mnist.classify_example(image_name, conv1, conv2, ip1, ip2);
-        std::cout << "\nResult of classification: " << i1 << std::endl;
-
-        cudaDeviceReset();
-        exit(0);
+    if (checkCmdLineFlag(argc, (const char **)argv, "image")) {
+      getCmdLineArgumentString(argc, (const char **)argv, "image",
+                               (char **)&test_image);
     }
+    std::cout << "Testing image: " << test_image << std::endl;
 
-    // default behaviour
-    if (argc == 1 || (argc == 2) && checkCmdLineFlag(argc, (const char **)argv, "device"))
+    // check available memory
+    struct cudaDeviceProp prop;
+    checkCudaErrors(cudaGetDeviceProperties( &prop, device ));
+    double globalMem = prop.totalGlobalMem/double(1024*1024);
+    bool low_memory = false;
+    if (globalMem < 1536) 
     {
-        // check available memory
-        struct cudaDeviceProp prop;
-        checkCudaErrors(cudaGetDeviceProperties( &prop, device ));
-        double globalMem = prop.totalGlobalMem/double(1024*1024);
-        bool low_memory = false;
-        if (globalMem < 1536) 
-        {
-            // takes care of 1x1 convolution workaround for fully connected layers
-            // when CUDNN_CONVOLUTION_FWD_ALGO_FFT is used
+        // takes care of 1x1 convolution workaround for fully connected layers
+        // when CUDNN_CONVOLUTION_FWD_ALGO_FFT is used
 #if !defined(CUDA_VERSION) || (CUDA_VERSION <= 7000)
-            low_memory = true;
+        low_memory = true;
 #endif
-        }
-        {
-            std::cout << "\nTesting single precision\n";
-            network_t<float> mnist;
-            Layer_t<float> conv1(1,32,3,conv1_bin,conv1_bias_bin,argv[0]);
-            Layer_t<float> conv2(32,64,3,conv2_bin,conv2_bias_bin,argv[0]);
-            Layer_t<float>   ip1(9216,128,1,ip1_bin,ip1_bias_bin,argv[0]);
-            Layer_t<float>   ip2(128,10,1,ip2_bin,ip2_bias_bin,argv[0]);
-            // get_path(image_path, first_image, argv[0]);
-            // i1 = mnist.classify_example(image_path.c_str(), conv1, conv2, ip1, ip2);
-            
-            get_path(image_path, second_image, argv[0]);
-            i2 = mnist.classify_example(image_path.c_str(), conv1, conv2, ip1, ip2);
-            
-            std::cout << "\nResult of classification: " << i2 << std::endl;
-        }
-
-        // {
-        //     std::cout << "\nTesting half precision (math in single precision)\n";
-        //     network_t<half1> mnist;
-
-        //     // Conversion of input weights to half precision is done
-        //     // on host using tools from fp16_emu.cpp
-        //     Layer_t<half1> conv1(1,32,3,conv1_bin,conv1_bias_bin,argv[0],FP16_HOST);
-        //     Layer_t<half1> conv2(32,64,3,conv2_bin,conv2_bias_bin,argv[0],FP16_HOST);
-
-        //     // Conversion of input weights to half precision is done
-        //     // on device using cudnnTransformTensor
-        //     Layer_t<half1>   ip1(9216,128,1,ip1_bin,ip1_bias_bin,argv[0], FP16_CUDNN);
-
-        //     // Conversion of input weights to half precision is done
-        //     // on device using CUDA kernel from fp16_dev.cu
-        //     Layer_t<half1>   ip2(128,10,1,ip2_bin,ip2_bias_bin,argv[0], FP16_CUDA);
-        //     // get_path(image_path, first_image, argv[0]);
-        //     // i1 = mnist.classify_example(image_path.c_str(), conv1, conv2, ip1, ip2);
-            
-        //     get_path(image_path, second_image, argv[0]);
-        //     i2 = mnist.classify_example(image_path.c_str(), conv1, conv2, ip1, ip2);
-            
-        //     // get_path(image_path, third_image, argv[0]);
-
-        //     // New feature in cuDNN v3: FFT for convolution
-        //     // if (!low_memory)
-        //     // {
-        //     //     mnist.setConvolutionAlgorithm(CUDNN_CONVOLUTION_FWD_ALGO_FFT);
-        //     // }
-        //     // i3 = mnist.classify_example(image_path.c_str(), conv1, conv2, ip1, ip2);
-
-        //     std::cout << "\nResult of classification: " << i1 << " " << i2 << " " << i3 << std::endl;
-        //     if (i1 != 1 || i2 != 3 || i3 != 5)
-        //     {
-        //         std::cout << "\nTest failed!\n";
-        //         FatalError("Prediction mismatch");
-        //     }
-        //     else
-        //     {
-        //         std::cout << "\nTest passed!\n";
-        //     }
-        // }
-
-        cudaDeviceReset();
-        exit(0);        
     }
-
-    displayUsage();
+    {
+        std::cout << "\nTesting single precision\n";
+        network_t<float> mnist;
+        Layer_t<float> conv1(1,32,3,conv1_bin,conv1_bias_bin,argv[0]);
+        Layer_t<float> conv2(32,64,3,conv2_bin,conv2_bias_bin,argv[0]);
+        Layer_t<float>   ip1(9216,128,1,ip1_bin,ip1_bias_bin,argv[0]);
+        Layer_t<float>   ip2(128,10,1,ip2_bin,ip2_bias_bin,argv[0]);
+        std::string image_path;
+        get_path(image_path, test_image, argv[0]);
+        int res = mnist.classify_example(image_path.c_str(), conv1, conv2, ip1, ip2);
+        std::cout << "\nResult of classification: " << res << std::endl;
+    }
     cudaDeviceReset();
-
-    exit(-1);
+    exit(0);
 }
 
